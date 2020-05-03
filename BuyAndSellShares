@@ -16,7 +16,6 @@ ASSUME /\ bigAmount \in Nat \ {0}
     priceChanges = 1,   \* Possible price changes - for this test limit to at most a 100% change during a round
     price = 199;
     shares = bigAmount;
-    change = FALSE;
     prevPrice = price;
     
     process (Trader = 0) { 
@@ -53,5 +52,73 @@ ASSUME /\ bigAmount \in Nat \ {0}
     }
 }
 
-\*Invariant condition
-NotBroke == (shares > 0)
+
+******************************************************************************)
+\* BEGIN TRANSLATION - the hash of the PCal code: PCal-693cd06c12c96aab54bec6350ac4a7d9
+VARIABLES b, priceChanges, price, shares, prevPrice, pc
+
+vars == << b, priceChanges, price, shares, prevPrice, pc >>
+
+ProcSet == {0} \cup {1}
+
+Init == (* Global variables *)
+        /\ b = 0
+        /\ priceChanges = 1
+        /\ price = 199
+        /\ shares = bigAmount
+        /\ prevPrice = price
+        /\ pc = [self \in ProcSet |-> CASE self = 0 -> "trade"
+                                        [] self = 1 -> "raise"]
+
+trade == /\ pc[0] = "trade"
+         /\ b = 0
+         /\ IF price > prevPrice
+               THEN /\ pc' = [pc EXCEPT ![0] = "sell"]
+               ELSE /\ pc' = [pc EXCEPT ![0] = "buy"]
+         /\ UNCHANGED << b, priceChanges, price, shares, prevPrice >>
+
+release == /\ pc[0] = "release"
+           /\ b' = 1
+           /\ pc' = [pc EXCEPT ![0] = "trade"]
+           /\ UNCHANGED << priceChanges, price, shares, prevPrice >>
+
+sell == /\ pc[0] = "sell"
+        /\ shares' = shares - smallAmount
+        /\ pc' = [pc EXCEPT ![0] = "release"]
+        /\ UNCHANGED << b, priceChanges, price, prevPrice >>
+
+buy == /\ pc[0] = "buy"
+       /\ shares' = shares + smallAmount
+       /\ pc' = [pc EXCEPT ![0] = "release"]
+       /\ UNCHANGED << b, priceChanges, price, prevPrice >>
+
+Trader == trade \/ release \/ sell \/ buy
+
+raise == /\ pc[1] = "raise"
+         /\ b = 1
+         /\ \/ /\ prevPrice' = price
+               /\ price' = priceChanges + price
+            \/ /\ prevPrice' = price
+               /\ price' = priceChanges - price
+         /\ pc' = [pc EXCEPT ![1] = "releaseMarket"]
+         /\ UNCHANGED << b, priceChanges, shares >>
+
+releaseMarket == /\ pc[1] = "releaseMarket"
+                 /\ b' = 0
+                 /\ pc' = [pc EXCEPT ![1] = "raise"]
+                 /\ UNCHANGED << priceChanges, price, shares, prevPrice >>
+
+Market == raise \/ releaseMarket
+
+Next == Trader \/ Market
+
+Spec == Init /\ [][Next]_vars
+
+\* END TRANSLATION - the hash of the generated TLA code (remove to silence divergence warnings): TLA-e5da67abcf30dfe88c9851533a464c68
+
+\* No share left to trade
+NoShareToTrade == (shares > 0)
+=============================================================================
+\* Modification History
+\* Last modified Sat May 02 19:49:25 CDT 2020 by keshvi
+\* Created Fri May 01 21:33:54 CDT 2020 by keshvi
