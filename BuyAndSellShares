@@ -1,0 +1,57 @@
+------------------------------ MODULE basicHFT ------------------------------
+EXTENDS Integers, TLC
+
+CONSTANTS bigAmount,  \* The number of potential buyers in the simulation 
+          smallAmount  \* The initial price of the equity
+
+ASSUME /\ bigAmount \in Nat \ {0}
+       /\ smallAmount \in Nat \ {0}
+       
+       
+\* change = True (positive increase) or False (negative change)
+(*****************************************************************************
+--algorithm HFT {
+
+    variable b = 0,            \* This variable controls the alternation between "our" actions and the "market's" actions           \* The latest price of the stock
+    priceChanges = 1,   \* Possible price changes - for this test limit to at most a 100% change during a round
+    price = 199;
+    shares = bigAmount;
+    change = FALSE;
+    prevPrice = price;
+    
+    process (Trader = 0) { 
+        trade: while (TRUE) { 
+            await b = 0 ;      \* alternation flag - wait for your turn
+            if (price > prevPrice) {  \* whenever we're done selling - assume we identified an up-trend and start another round
+                sell: 
+                    shares := shares - smallAmount;
+            }
+            else {
+                buy:
+                   shares := shares + smallAmount;
+            };
+            release: b := 1;  \* pass the turn
+        }
+    }
+
+    process (Market = 1) { 
+        raise: while (TRUE) { 
+            await b = 1 ; 
+            either
+            {
+                \*change := TRUE;
+                prevPrice := price;
+                price := priceChanges + price;
+            }
+            or
+            {
+                prevPrice := price;
+                price := priceChanges - price;
+            };
+            releaseMarket: b := 0;  \* pass the turn
+        }
+    }
+}
+
+\*Invariant condition
+NotBroke == (shares > 0)
