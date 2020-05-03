@@ -1,0 +1,129 @@
+------------------------------ MODULE basicHFT ------------------------------
+EXTENDS Integers, TLC
+
+CONSTANTS bigAmount,  \* The number of potential buyers in the simulation 
+          smallAmount  \* The initial price of the equity
+
+ASSUME /\ bigAmount \in Nat \ {0}
+       /\ smallAmount \in Nat \ {0}
+       
+       
+\* change = True (positive increase) or False (negative change)
+(*****************************************************************************
+--algorithm HFT {
+
+    variable b = 0,            
+    priceChanges = 1,   
+    price = 199;
+    shares = bigAmount;
+    prevPrice = price;
+    funds = 0;
+    
+    process (Trader = 0) { 
+        trade: while (TRUE) { 
+            await b = 0 ;      \* alternation flag - wait for your turn
+            if (price > prevPrice) {  
+                sell: 
+                    shares := shares - smallAmount;
+                    funds := funds + price*smallAmount;
+            }
+            else {
+                buy:
+                   shares := shares + smallAmount;
+                   funds := funds - price*smallAmount;
+            };
+            release: b := 1;  \* pass the turn
+        }
+    }
+
+    process (Market = 1) { 
+        raise: while (TRUE) { 
+            await b = 1 ; 
+            either
+            {
+                prevPrice := price;
+                price := priceChanges + price;
+            }
+            or
+            {
+                prevPrice := price;
+                price := priceChanges - price;
+            };
+            releaseMarket: b := 0;  \* pass the turn
+        }
+    }
+}
+
+
+******************************************************************************)
+\* BEGIN TRANSLATION - the hash of the PCal code: PCal-f16bd3e5311672b24ff1abc0223963ee
+VARIABLES b, priceChanges, price, shares, prevPrice, funds, pc
+
+vars == << b, priceChanges, price, shares, prevPrice, funds, pc >>
+
+ProcSet == {0} \cup {1}
+
+Init == (* Global variables *)
+        /\ b = 0
+        /\ priceChanges = 1
+        /\ price = 199
+        /\ shares = bigAmount
+        /\ prevPrice = price
+        /\ funds = 0
+        /\ pc = [self \in ProcSet |-> CASE self = 0 -> "trade"
+                                        [] self = 1 -> "raise"]
+
+trade == /\ pc[0] = "trade"
+         /\ b = 0
+         /\ IF price > prevPrice
+               THEN /\ pc' = [pc EXCEPT ![0] = "sell"]
+               ELSE /\ pc' = [pc EXCEPT ![0] = "buy"]
+         /\ UNCHANGED << b, priceChanges, price, shares, prevPrice, funds >>
+
+release == /\ pc[0] = "release"
+           /\ b' = 1
+           /\ pc' = [pc EXCEPT ![0] = "trade"]
+           /\ UNCHANGED << priceChanges, price, shares, prevPrice, funds >>
+
+sell == /\ pc[0] = "sell"
+        /\ shares' = shares - smallAmount
+        /\ funds' = funds + price*smallAmount
+        /\ pc' = [pc EXCEPT ![0] = "release"]
+        /\ UNCHANGED << b, priceChanges, price, prevPrice >>
+
+buy == /\ pc[0] = "buy"
+       /\ shares' = shares + smallAmount
+       /\ funds' = funds - price*smallAmount
+       /\ pc' = [pc EXCEPT ![0] = "release"]
+       /\ UNCHANGED << b, priceChanges, price, prevPrice >>
+
+Trader == trade \/ release \/ sell \/ buy
+
+raise == /\ pc[1] = "raise"
+         /\ b = 1
+         /\ \/ /\ prevPrice' = price
+               /\ price' = priceChanges + price
+            \/ /\ prevPrice' = price
+               /\ price' = priceChanges - price
+         /\ pc' = [pc EXCEPT ![1] = "releaseMarket"]
+         /\ UNCHANGED << b, priceChanges, shares, funds >>
+
+releaseMarket == /\ pc[1] = "releaseMarket"
+                 /\ b' = 0
+                 /\ pc' = [pc EXCEPT ![1] = "raise"]
+                 /\ UNCHANGED << priceChanges, price, shares, prevPrice, funds >>
+
+Market == raise \/ releaseMarket
+
+Next == Trader \/ Market
+
+Spec == Init /\ [][Next]_vars
+
+\* END TRANSLATION - the hash of the generated TLA code (remove to silence divergence warnings): TLA-31bc634f778babb96b3378dc0870bb64
+
+\* When we have shares but no funds
+NotBroke == (funds < 0) => (price < prevPrice)
+=============================================================================
+\* Modification History
+\* Last modified Sat May 02 19:57:38 CDT 2020 by keshvi
+\* Created Fri May 01 21:33:54 CDT 2020 by keshvi
